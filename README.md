@@ -24,7 +24,7 @@ Workshop Pass Desk is a WordPress/WooCommerce operations product for running pai
 
 ## Versions and deployment
 
-The maintained target is PHP 8.3+, WordPress 6.9+, and the current WooCommerce release. CI runs PHP linting, deterministic plugin-level contract tests, and packages a ZIP artifact. A full WordPress/WooCommerce integration smoke test is documented below because this repository does not vendor a test site.
+The maintained target is PHP 8.3+, WordPress 6.6+, and WooCommerce 9.0+. The Playground Blueprint pins WooCommerce 9.6.4 because it is compatible with the Playground WordPress 6.6 runtime; a persistent host can use a newer compatible WooCommerce release. CI runs PHP linting, deterministic plugin-level contract tests, and packages a ZIP artifact. A full WordPress/WooCommerce integration smoke test is documented below because this repository does not vendor a test site.
 
 The included [Playground Blueprint](blueprint/blueprint.json) installs WordPress and WooCommerce and loads the direct public GitHub codeload archive (whose extracted folder is `workshop-pass-desk-main`). For a local ZIP demo:
 
