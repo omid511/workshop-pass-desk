@@ -1,0 +1,5 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Read the integration smoke path first
+    url: https://github.com/omid511/workshop-pass-desk#integration-smoke-path
+    about: The repository documents the disposable WordPress/WooCommerce integration boundary before opening an issue.

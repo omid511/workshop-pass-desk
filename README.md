@@ -1,5 +1,8 @@
 # Workshop Pass Desk
 
+[![CI](https://github.com/omid511/workshop-pass-desk/actions/workflows/ci.yml/badge.svg)](https://github.com/omid511/workshop-pass-desk/actions/workflows/ci.yml)
+[![Issues](https://img.shields.io/github/issues/omid511/workshop-pass-desk)](https://github.com/omid511/workshop-pass-desk/issues)
+
 Workshop Pass Desk is a WordPress/WooCommerce operations product for running paid workshops end to end: organizers configure a workshop and multi-session schedule, sell capacity-limited passes, manage waitlists, issue revocable attendee credentials, check people in safely, and export attendance evidence. It does not lock content, create subscription roles, or implement generic membership behavior.
 
 ## End-to-end flow
