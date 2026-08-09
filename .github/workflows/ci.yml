@@ -1,0 +1,42 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  checks:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        php: ['8.3']
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: ${{ matrix.php }}
+          tools: composer:v2
+          coverage: none
+      - name: Lint PHP
+        run: |
+          set -eu
+          find . -type f -name '*.php' -print0 | xargs -0 -n1 php -l
+      - name: Contract tests
+        run: php tests/test_contract.php
+      - name: Package plugin
+        run: |
+          set -eu
+          rm -rf dist
+          mkdir -p dist/workshop-pass-desk
+          cp workshop-pass-desk.php README.md LICENSE dist/workshop-pass-desk/
+          cp -R includes assets dist/workshop-pass-desk/
+          (cd dist && zip -qr workshop-pass-desk.zip workshop-pass-desk)
+      - name: Upload Playground-ready artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: workshop-pass-desk-php-${{ matrix.php }}
+          path: dist/workshop-pass-desk.zip
+      - name: WordPress smoke path
+        run: echo 'Full WordPress/WooCommerce integration smoke path is documented in README.md; use a disposable Playground or test site with the uploaded ZIP.'
