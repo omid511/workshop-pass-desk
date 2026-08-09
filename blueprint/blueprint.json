@@ -3,7 +3,7 @@
   "landingPage": "/wp-admin/admin.php?page=wpd-workshops",
   "preferredVersions": {
     "php": "8.3",
-    "wp": "6.6"
+    "wp": "6.9"
   },
   "steps": [
     { "step": "login", "username": "organizer", "password": "playground-demo-only" },
