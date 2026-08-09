@@ -7,7 +7,7 @@
   },
   "steps": [
     { "step": "login", "username": "organizer", "password": "playground-demo-only" },
-    { "step": "installPlugin", "pluginData": { "resource": "url", "url": "https://github.com/omid511/workshop-pass-desk/archive/refs/heads/main.zip" } },
+    { "step": "installPlugin", "pluginData": { "resource": "url", "url": "https://codeload.github.com/omid511/workshop-pass-desk/zip/refs/heads/main" } },
     { "step": "installPlugin", "pluginData": { "resource": "wordpress.org/plugins", "slug": "woocommerce" } },
     { "step": "activatePlugin", "pluginPath": "woocommerce/woocommerce.php" },
     { "step": "activatePlugin", "pluginPath": "workshop-pass-desk-main/workshop-pass-desk.php" }
