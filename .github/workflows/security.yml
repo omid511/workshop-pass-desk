@@ -24,6 +24,6 @@ jobs:
       image: semgrep/semgrep:1.166.0
     steps:
       - name: Check out repository
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
       - name: Scan PHP source
         run: semgrep scan --config p/php --error --metrics off
