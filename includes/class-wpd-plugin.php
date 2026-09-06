@@ -6,6 +6,9 @@ if ( ! defined( 'ABSPATH' ) ) {
 final class WPD_Plugin {
 	public static function boot(): void {
 		load_plugin_textdomain( 'workshop-pass-desk', false, dirname( plugin_basename( WPD_FILE ) ) . '/languages' );
+		if ( function_exists( 'is_plugin_active_for_network' ) && is_plugin_active_for_network( plugin_basename( WPD_FILE ) ) ) {
+			add_action( 'admin_notices', static function(): void { echo '<div class="notice notice-warning"><p>' . esc_html__( 'Workshop Pass Desk is single-site only. Network activation is not supported; activate it on individual sites instead.', 'workshop-pass-desk' ) . '</p></div>'; } );
+		}
 		if ( ! class_exists( 'WooCommerce' ) ) {
 			add_action( 'admin_notices', static function(): void { if ( current_user_can( 'activate_plugins' ) ) { echo '<div class="notice notice-warning"><p>' . esc_html__( 'Workshop Pass Desk needs WooCommerce active.', 'workshop-pass-desk' ) . '</p></div>'; } } );
 			return;

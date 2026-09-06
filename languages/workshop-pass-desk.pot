@@ -1,0 +1,266 @@
+# SOME DESCRIPTIVE TITLE.
+# Copyright (C) YEAR THE PACKAGE'S COPYRIGHT HOLDER
+# This file is distributed under the same license as the Workshop Pass Desk package.
+# FIRST AUTHOR <EMAIL@ADDRESS>, YEAR.
+#
+#, fuzzy
+msgid ""
+msgstr ""
+"Project-Id-Version: Workshop Pass Desk\n"
+"Report-Msgid-Bugs-To: \n"
+"POT-Creation-Date: 2026-09-06 14:14+0330\n"
+"PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
+"Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
+"Language-Team: LANGUAGE <LL@li.org>\n"
+"Language: \n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+
+msgid "Workshop Pass Desk"
+msgstr ""
+
+msgid "Pass Desk"
+msgstr ""
+
+msgid "Check in"
+msgstr ""
+
+msgid "Permission check failed."
+msgstr ""
+
+msgid "Workshop not found."
+msgstr ""
+
+msgid "Create workshops, map products in WooCommerce, and watch attendance."
+msgstr ""
+
+msgid "New workshop"
+msgstr ""
+
+msgid "Title"
+msgstr ""
+
+msgid "Description"
+msgstr ""
+
+msgid "Starts (site timezone)"
+msgstr ""
+
+msgid "Ends"
+msgstr ""
+
+msgid "Capacity"
+msgstr ""
+
+msgid "Status"
+msgstr ""
+
+msgid "Draft"
+msgstr ""
+
+msgid "Active"
+msgstr ""
+
+msgid "Cancelled"
+msgstr ""
+
+msgid "Create workshop"
+msgstr ""
+
+msgid "Edit workshop"
+msgstr ""
+
+msgid "Save changes"
+msgstr ""
+
+msgid "Your workshops"
+msgstr ""
+
+msgid "Workshop"
+msgstr ""
+
+msgid "Window"
+msgstr ""
+
+msgid "Sessions"
+msgstr ""
+
+msgid "Operations"
+msgstr ""
+
+msgid "Map a WooCommerce product"
+msgstr ""
+
+msgid "Add session"
+msgstr ""
+
+msgid "Export CSV"
+msgstr ""
+
+msgid "Edit"
+msgstr ""
+
+msgid "Delete this workshop? Passes must be zero."
+msgstr ""
+
+msgid "Delete"
+msgstr ""
+
+msgid "No workshops yet."
+msgstr ""
+
+msgid "Check in an attendee"
+msgstr ""
+
+msgid "Enter the pass code exactly as shown on the attendee receipt."
+msgstr ""
+
+msgid "Pass code"
+msgstr ""
+
+msgid ""
+"Workshop Pass Desk is single-site only. Network activation is not supported; "
+"activate it on individual sites instead."
+msgstr ""
+
+msgid "Workshop Pass Desk needs WooCommerce active."
+msgstr ""
+
+msgid "Log in to view your workshop passes."
+msgstr ""
+
+msgid "No workshop passes found."
+msgstr ""
+
+msgid "My workshop passes"
+msgstr ""
+
+msgid " · Checked in"
+msgstr ""
+
+msgid "Organizer access is required."
+msgstr ""
+
+msgid "Choose a workshop for this waitlist form."
+msgstr ""
+
+msgid "You are on the waitlist. We will email you if a place opens."
+msgstr ""
+
+msgid "Name"
+msgstr ""
+
+msgid "Email"
+msgstr ""
+
+msgid "Join waitlist"
+msgstr ""
+
+msgid "Workshop ID"
+msgstr ""
+
+msgid "Map this product to a Workshop Pass Desk workshop."
+msgstr ""
+
+msgid ""
+"That workshop does not belong to you; the product mapping was not saved."
+msgstr ""
+
+msgid ""
+"Map this variation to a Workshop Pass Desk workshop. Leave empty to use the "
+"parent product mapping."
+msgstr ""
+
+msgid "Your workshop passes"
+msgstr ""
+
+msgid "Save these codes. They are used at check-in."
+msgstr ""
+
+msgid "You cannot manage workshops."
+msgstr ""
+
+msgid "End time must be after start time."
+msgstr ""
+
+msgid "A workshop title is required."
+msgstr ""
+
+msgid "Capacity cannot drop below the passes already issued."
+msgstr ""
+
+msgid "The workshop could not be saved."
+msgstr ""
+
+msgid "Main session"
+msgstr ""
+
+msgid "Workshops with passes cannot be deleted. Cancel it instead."
+msgstr ""
+
+msgid "You cannot manage this workshop."
+msgstr ""
+
+msgid "A session needs a title and an end after its start."
+msgstr ""
+
+msgid "Session not found."
+msgstr ""
+
+msgid "WooCommerce is required."
+msgstr ""
+
+msgid "Pass cryptography is unavailable on this host."
+msgstr ""
+
+msgid "A pass code could not be generated."
+msgstr ""
+
+msgid "Enter a pass code."
+msgstr ""
+
+msgid "Too many attempts. Try again in a minute."
+msgstr ""
+
+msgid "Pass code is not recognized."
+msgstr ""
+
+msgid "This pass has been cancelled."
+msgstr ""
+
+#, php-format
+msgid "Already checked in at %s."
+msgstr ""
+
+#, php-format
+msgid "Check-in opens %s and closes %s."
+msgstr ""
+
+msgid "This pass was checked in by another device."
+msgstr ""
+
+msgid "Check-in could not be recorded. Try again."
+msgstr ""
+
+msgid "Pass accepted. Attendee checked in."
+msgstr ""
+
+msgid "Enter a valid email address."
+msgstr ""
+
+msgid "Too many waitlist requests. Try again later."
+msgstr ""
+
+msgid "That workshop is not accepting waitlist entries."
+msgstr ""
+
+#, php-format
+msgid "A place opened for %s"
+msgstr ""
+
+#, php-format
+msgid ""
+"A place is now available for %s. Places go first come, first served, so "
+"complete your purchase promptly."
+msgstr ""

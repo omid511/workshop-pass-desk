@@ -1,5 +1,28 @@
 # Changelog
 
+## 0.3.0 - 2026-09-06
+
+- Partial refunds revoke exactly the refunded units; subscription renewals
+  never mint passes.
+- Dedicated per-site pass secret with rotation; passes survive salt changes
+  via previous-secret and legacy fallbacks.
+- Issuance fails closed with an admin-visible error when cryptography is
+  missing; code generation failures roll back instead of half-issuing.
+- Variation workshop mapping requires the Woo save nonce; mappings to
+  unowned workshops surface an error instead of failing silently.
+- Waitlist invites transition to invited only on delivered mail; failures
+  stay pending with a `mail_failed` event. Joins are rate limited and
+  invites are first-come, first-served.
+- Check-in wraps the guarded update and attendance insert in one
+  transaction; rate-limit buckets are namespaced per feature.
+- CSV export escapes spreadsheet formula triggers.
+- Workshop edit/delete UI; capacity cannot drop below issued passes;
+  workshops with passes cannot be deleted.
+- Schema upgrades run locked on admin screens only; single-site guard with
+  network-activation notice; erase-on-uninstall opt-in (default keep).
+- wordpress.org readme.txt, translation template, and a 28-assertion
+  behavioral suite (SQLite-backed) wired into CI and release checks.
+
 ## 0.2.0 - 2026-09-06
 
 - Declared WooCommerce HPOS (`custom_order_tables`) compatibility and added

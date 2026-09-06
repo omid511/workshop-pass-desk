@@ -16,13 +16,14 @@ Workshop Pass Desk is a WordPress/WooCommerce operations product for running pai
 
 ## Security and state rules
 
-- Codes use `random_bytes`, are normalized before use, and are stored as an HMAC hash. An encrypted recovery value is stored so the signed-in attendee can see their code without storing plaintext; the hash is the verification source of truth.
-- Check-in reports `valid`, `already_checked_in`, `cancelled`, `out_of_window`, `invalid`, or `rate_limited`. The update requires `checked_in_at IS NULL`; the unique attendance key and affected-row check make concurrent check-ins idempotent.
-- Admin mutations require `manage_workshop_passes` and WordPress nonces. Workshop reads and updates are scoped to the current owner. SQL uses `$wpdb->prepare`; rendered values are escaped.
-- Full refunds and cancellations revoke passes that have not checked in. A checked-in pass remains an attendance record and is not silently erased.
+- Codes use `random_bytes` and are stored as an HMAC hash under a dedicated per-site secret (rotatable; old passes keep verifying). An encrypted recovery value is stored so the signed-in attendee can see their code without storing plaintext; the hash is the verification source of truth. Issuance fails closed when cryptography is unavailable.
+- Check-in reports `valid`, `already_checked_in`, `cancelled`, `out_of_window`, `invalid`, or `rate_limited`. The guarded update and the attendance insert run in one transaction; the unique attendance key and affected-row check make concurrent check-ins idempotent.
+- Admin mutations require `manage_workshop_passes` and WordPress nonces, including variation-level workshop mapping. Workshop reads, updates, and deletes are scoped to the current owner; capacity cannot drop below issued passes and workshops with passes cannot be deleted. SQL uses `$wpdb->prepare`; rendered values are escaped.
+- Full refunds and cancellations revoke passes that have not checked in; partial refunds revoke exactly the refunded units. Subscription renewals never mint passes. A checked-in pass remains an attendance record and is not silently erased.
 - Capacity is enforced inside a transaction while the workshop row is locked. WP-Cron is not used for check-in validity, so missed cron cannot grant access.
-- Session creation, waitlist joins/invitations, issuance, check-in, cancellation, and workshop changes are recorded in the event table. Repeated plugin activation runs `dbDelta` and the version upgrade hook so schema additions are not silently skipped.
-- CSV exports are owner-scoped and contain operational identifiers/timestamps, not pass secrets. The customer-facing waitlist form validates email and uses a per-workshop nonce.
+- Session creation, waitlist joins/invitations, issuance, check-in, cancellation, secret rotation, mail failures, and workshop changes are recorded in the event table. Schema upgrades run locked on admin screens only, never on public page views.
+- CSV exports are owner-scoped, escape spreadsheet formula triggers, and contain operational identifiers/timestamps, not pass secrets. The customer-facing waitlist form validates email, uses a per-workshop nonce, and is rate limited; invites send first-come, first-served only on delivered mail.
+- Single-site only; network activation shows a warning. Uninstall keeps data by default unless erase is opted in.
 
 ## Versions and deployment
 
@@ -39,8 +40,8 @@ The included [Playground Blueprint](blueprint/blueprint.json) installs the lates
 
 ```sh
 rm -rf dist && mkdir -p dist/workshop-pass-desk
-cp workshop-pass-desk.php uninstall.php README.md LICENSE dist/workshop-pass-desk/
-cp -R includes assets dist/workshop-pass-desk/
+cp workshop-pass-desk.php uninstall.php README.md readme.txt LICENSE dist/workshop-pass-desk/
+cp -R includes assets languages dist/workshop-pass-desk/
 (cd dist && zip -qr workshop-pass-desk.zip workshop-pass-desk)
 ```
 

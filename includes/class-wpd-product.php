@@ -14,6 +14,8 @@ final class WPD_Product {
 		add_action( 'woocommerce_payment_complete', array( __CLASS__, 'issue' ) );
 		add_action( 'woocommerce_order_status_refunded', array( __CLASS__, 'cancel' ) );
 		add_action( 'woocommerce_order_status_cancelled', array( __CLASS__, 'cancel' ) );
+		add_action( 'woocommerce_order_partially_refunded', array( __CLASS__, 'refunded' ), 10, 2 );
+		add_action( 'woocommerce_order_refunded', array( __CLASS__, 'refunded' ), 10, 2 );
 		add_action( 'woocommerce_thankyou', array( __CLASS__, 'thankyou' ) );
 	}
 
@@ -24,15 +26,22 @@ final class WPD_Product {
 		woocommerce_wp_text_input( array( 'id' => '_wpd_workshop_id', 'label' => __( 'Workshop ID', 'workshop-pass-desk' ), 'description' => __( 'Map this product to a Workshop Pass Desk workshop.', 'workshop-pass-desk' ), 'desc_tip' => true, 'type' => 'number' ) );
 	}
 
-	public static function save( int $product_id ): void {
+	public static function save( int $product_id ): bool|WP_Error {
 		$nonce = isset( $_POST['woocommerce_meta_nonce'] ) ? sanitize_text_field( wp_unslash( $_POST['woocommerce_meta_nonce'] ) ) : '';
 		if ( ! current_user_can( 'edit_product', $product_id ) || ! isset( $_POST['_wpd_workshop_id'] ) || ! wp_verify_nonce( $nonce, 'woocommerce_save_data' ) ) {
-			return;
+			return false;
 		}
 		$workshop_id = absint( wp_unslash( $_POST['_wpd_workshop_id'] ) );
 		update_post_meta( $product_id, '_wpd_workshop_id', $workshop_id );
-		global $wpdb;
-		$wpdb->query( $wpdb->prepare( 'UPDATE ' . WPD_DB::workshops_table() . ' SET product_id = %d, updated_at = %s WHERE id = %d AND owner_id = %d', $product_id, current_time( 'mysql' ), $workshop_id, get_current_user_id() ) );
+		if ( $workshop_id ) {
+			global $wpdb;
+			$owned = $wpdb->get_var( $wpdb->prepare( 'SELECT id FROM ' . WPD_DB::workshops_table() . ' WHERE id = %d AND owner_id = %d', $workshop_id, get_current_user_id() ) );
+			if ( ! $owned ) {
+				return new WP_Error( 'mapping_failed', __( 'That workshop does not belong to you; the product mapping was not saved.', 'workshop-pass-desk' ) );
+			}
+			$wpdb->query( $wpdb->prepare( 'UPDATE ' . WPD_DB::workshops_table() . ' SET product_id = %d, updated_at = %s WHERE id = %d AND owner_id = %d', $product_id, current_time( 'mysql' ), $workshop_id, get_current_user_id() ) );
+		}
+		return true;
 	}
 
 	public static function variation_field( int $loop, array $variation_data, object $variation ): void {
@@ -51,7 +60,8 @@ final class WPD_Product {
 	}
 
 	public static function save_variation( int $variation_id, int $loop ): void {
-		if ( ! current_user_can( 'edit_product', $variation_id ) || ! isset( $_POST['_wpd_workshop_id'][ $variation_id ] ) ) {
+		$nonce = isset( $_POST['woocommerce_meta_nonce'] ) ? sanitize_text_field( wp_unslash( $_POST['woocommerce_meta_nonce'] ) ) : '';
+		if ( ! current_user_can( 'edit_product', $variation_id ) || ! isset( $_POST['_wpd_workshop_id'][ $variation_id ] ) || ! wp_verify_nonce( $nonce, 'woocommerce_save_data' ) ) {
 			return;
 		}
 		update_post_meta( $variation_id, '_wpd_workshop_id', absint( wp_unslash( $_POST['_wpd_workshop_id'][ $variation_id ] ) ) );
@@ -65,6 +75,10 @@ final class WPD_Product {
 		if ( wc_get_order( $order_id ) ) {
 			WPD_Service::cancel_order( $order_id );
 		}
+	}
+
+	public static function refunded( int $order_id, int $refund_id ): void {
+		WPD_Service::revoke_refunded_units( $order_id, $refund_id );
 	}
 
 	public static function thankyou( int $order_id ): void {

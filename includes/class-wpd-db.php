@@ -35,6 +35,7 @@ final class WPD_DB {
 	}
 
 	public static function activate(): void {
+		self::ensure_secret();
 		require_once ABSPATH . 'wp-admin/includes/upgrade.php';
 		global $wpdb;
 		$collate = $wpdb->get_charset_collate();
@@ -144,12 +145,46 @@ final class WPD_DB {
 		if ( $admin ) {
 			$admin->add_cap( 'manage_workshop_passes' );
 		}
-		flush_rewrite_rules();
+	}
+
+	public static function ensure_secret(): void {
+		$secret = get_option( 'wpd_secret' );
+		if ( is_string( $secret ) && 64 === strlen( $secret ) ) {
+			return;
+		}
+		try {
+			$secret = bin2hex( random_bytes( 32 ) );
+		} catch ( Exception $e ) {
+			$secret = hash( 'sha256', (string) wp_salt( 'auth' ) . microtime( true ) );
+		}
+		update_option( 'wpd_secret', $secret );
 	}
 
 	public static function maybe_upgrade(): void {
-		if ( WPD_DB_VERSION !== get_option( 'wpd_db_version' ) ) {
-			self::activate();
+		if ( WPD_DB_VERSION === get_option( 'wpd_db_version' ) ) {
+			return;
+		}
+		if ( get_transient( 'wpd_upgrade_lock' ) ) {
+			return;
+		}
+		set_transient( 'wpd_upgrade_lock', time(), 5 * MINUTE_IN_SECONDS );
+		self::activate();
+	}
+
+	public static function uninstall( bool $erase ): void {
+		if ( $erase ) {
+			global $wpdb;
+			foreach ( array( 'wpd_events', 'wpd_attendance', 'wpd_passes', 'wpd_sessions', 'wpd_waitlist', 'wpd_workshops' ) as $table ) {
+				$wpdb->query( 'DROP TABLE IF EXISTS ' . $wpdb->prefix . $table );
+			}
+			delete_option( 'wpd_db_version' );
+			delete_option( 'wpd_secret' );
+			delete_option( 'wpd_secret_previous' );
+			delete_option( 'wpd_settings' );
+		}
+		$admin = get_role( 'administrator' );
+		if ( $admin && $admin->has_cap( 'manage_workshop_passes' ) ) {
+			$admin->remove_cap( 'manage_workshop_passes' );
 		}
 	}
 

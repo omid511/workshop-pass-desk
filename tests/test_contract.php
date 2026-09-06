@@ -75,6 +75,21 @@ $checks = array(
 	'admin assets' => str_contains( $admin, 'admin_enqueue_scripts' ) && str_contains( $admin, 'assets/style.css' ),
 	'textdomain' => str_contains( $plugin, 'load_plugin_textdomain' ),
 	'uninstall cleanup' => is_file( $root . '/uninstall.php' ) && str_contains( (string) file_get_contents( $root . '/uninstall.php' ), 'WP_UNINSTALL_PLUGIN' ) && str_contains( $ci, 'uninstall.php' ) && str_contains( $release, 'uninstall.php' ),
+	'partial refund revocation' => str_contains( $product, 'woocommerce_order_partially_refunded' ) && str_contains( $service, 'revoke_refunded_units' ) && str_contains( $service, '_refunded_item_id' ),
+	'renewal guard' => str_contains( $service, '_subscription_renewal' ),
+	'crypto fail-closed' => str_contains( $service, 'crypto_available' ) && str_contains( $service, 'crypto_unavailable' ),
+	'dedicated pass secret' => str_contains( $db, 'wpd_secret' ) && str_contains( $service, 'rotate_secret' ) && str_contains( $service, 'wpd_secret_previous' ),
+	'variation nonce' => str_contains( $product, 'woocommerce_meta_nonce' ) && substr_count( $product, 'wp_verify_nonce' ) >= 2,
+	'mail-gated invites' => str_contains( $service, 'mail_failed' ) && str_contains( $service, 'wp_mail' ),
+	'waitlist rate limit' => str_contains( $service, 'rate_limited' ) && str_contains( $service, 'HOUR_IN_SECONDS' ),
+	'atomic check-in transaction' => str_contains( $service, 'START TRANSACTION' ) && str_contains( $service, "'COMMIT'" ),
+	'csv formula guard' => str_contains( $admin, 'csv_cell' ),
+	'workshop edit and delete' => str_contains( $admin, 'wpd_delete_workshop' ) && str_contains( $service, 'delete_workshop' ) && str_contains( $service, 'capacity_below_issued' ),
+	'locked upgrades' => str_contains( $db, 'wpd_upgrade_lock' ) && str_contains( $bootstrap, 'admin_init' ),
+	'erase-on-uninstall setting' => str_contains( (string) file_get_contents( $root . '/uninstall.php' ), 'erase_on_uninstall' ),
+	'single-site guard' => str_contains( $plugin, 'is_plugin_active_for_network' ),
+	'org readme and translations' => is_file( $root . '/readme.txt' ) && str_contains( (string) file_get_contents( $root . '/readme.txt' ), 'Stable tag:' ) && is_file( $root . '/languages/workshop-pass-desk.pot' ),
+	'behavioral suite wired' => str_contains( $ci, 'test_behavioral.php' ) && str_contains( $release, 'test_behavioral.php' ) && is_file( $root . '/tests/test_behavioral.php' ),
 );
 foreach ( $checks as $name => $ok ) {
 	if ( ! $ok ) {

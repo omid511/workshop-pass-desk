@@ -8,24 +8,85 @@ final class WPD_Service {
 		return current_time( 'mysql' );
 	}
 
+	public static function crypto_available(): bool {
+		$ok = function_exists( 'openssl_encrypt' ) && function_exists( 'openssl_decrypt' ) && function_exists( 'random_bytes' );
+		if ( function_exists( 'apply_filters' ) ) {
+			$ok = (bool) apply_filters( 'wpd_crypto_available', $ok );
+		}
+		return $ok;
+	}
+
+	private static function secret( bool $previous = false ): string {
+		$s = get_option( $previous ? 'wpd_secret_previous' : 'wpd_secret' );
+		return is_string( $s ) && 64 === strlen( $s ) ? $s : '';
+	}
+
+	private static function legacy_salt( string $scheme ): string {
+		return function_exists( 'wp_salt' ) ? (string) wp_salt( $scheme ) : '';
+	}
+
+	public static function rotate_secret(): void {
+		update_option( 'wpd_secret_previous', self::secret() );
+		try {
+			update_option( 'wpd_secret', bin2hex( random_bytes( 32 ) ) );
+		} catch ( Exception $e ) {
+			update_option( 'wpd_secret', hash( 'sha256', self::legacy_salt( 'auth' ) . microtime( true ) ) );
+		}
+	}
+
 	private static function code_hash( string $code ): string {
-		return hash_hmac( 'sha256', strtoupper( trim( $code ) ), wp_salt( 'auth' ) );
+		return self::code_hash_with( $code, self::secret() );
+	}
+
+	private static function code_hash_with( string $code, string $secret ): string {
+		$key = '' !== $secret ? $secret : self::legacy_salt( 'auth' );
+		return hash_hmac( 'sha256', strtoupper( trim( $code ) ), $key );
+	}
+
+	private static function code_hashes( string $code ): array {
+		$hashes = array();
+		foreach ( array( self::secret(), self::secret( true ), self::legacy_salt( 'auth' ) ) as $s ) {
+			if ( '' === $s ) {
+				continue;
+			}
+			$h = self::code_hash_with( $code, $s );
+			$hashes[ $h ] = true;
+		}
+		return array_keys( $hashes );
+	}
+
+	private static function cipher_keys(): array {
+		$keys = array();
+		foreach ( array( self::secret(), self::secret( true ) ) as $s ) {
+			if ( '' !== $s ) {
+				$keys[] = hash( 'sha256', $s, true );
+			}
+		}
+		$keys[] = hash( 'sha256', self::legacy_salt( 'secure_auth' ), true );
+		return $keys;
 	}
 
 	private static function encrypt_code( string $code ): string {
-		$key = hash( 'sha256', wp_salt( 'secure_auth' ), true );
 		$iv  = random_bytes( 16 );
-		$cipher = openssl_encrypt( $code, 'aes-256-cbc', $key, OPENSSL_RAW_DATA, $iv );
+		$cipher = openssl_encrypt( $code, 'aes-256-cbc', self::cipher_keys()[0], OPENSSL_RAW_DATA, $iv );
 		return base64_encode( $iv . $cipher );
 	}
 
 	private static function decrypt_code( string $payload ): string {
-		$key = hash( 'sha256', wp_salt( 'secure_auth' ), true );
+		if ( ! self::crypto_available() ) {
+			return '';
+		}
 		$raw = base64_decode( $payload, true );
 		if ( false === $raw || strlen( $raw ) < 17 ) {
 			return '';
 		}
-		return (string) openssl_decrypt( substr( $raw, 16 ), 'aes-256-cbc', $key, OPENSSL_RAW_DATA, substr( $raw, 0, 16 ) );
+		foreach ( self::cipher_keys() as $key ) {
+			$plain = openssl_decrypt( substr( $raw, 16 ), 'aes-256-cbc', $key, OPENSSL_RAW_DATA, substr( $raw, 0, 16 ) );
+			if ( is_string( $plain ) && '' !== $plain ) {
+				return $plain;
+			}
+		}
+		return '';
 	}
 
 	public static function save_workshop( array $data, int $id = 0 ): int|WP_Error {
@@ -55,6 +116,10 @@ final class WPD_Service {
 			if ( ! $owned ) {
 				return new WP_Error( 'not_found', __( 'Workshop not found.', 'workshop-pass-desk' ) );
 			}
+			$issued = (int) $wpdb->get_var( $wpdb->prepare( 'SELECT COUNT(*) FROM ' . WPD_DB::passes_table() . " WHERE workshop_id = %d AND status = 'active'", $id ) );
+			if ( $capacity < $issued ) {
+				return new WP_Error( 'capacity_below_issued', __( 'Capacity cannot drop below the passes already issued.', 'workshop-pass-desk' ) );
+			}
 			$wpdb->update( $table, $values, array( 'id' => $id ), array( '%d', '%s', '%s', '%s', '%s', '%d', '%s', '%d', '%s' ), array( '%d' ) );
 			self::log_event( $id, 0, 'workshop_updated', array( 'title' => $title, 'status' => $status ) );
 			return $id;
@@ -67,6 +132,26 @@ final class WPD_Service {
 		self::save_session( $workshop_id, array( 'title' => __( 'Main session', 'workshop-pass-desk' ), 'starts_at' => $start, 'ends_at' => $end ) );
 		self::log_event( $workshop_id, 0, 'workshop_created', array( 'title' => $title, 'status' => $status ) );
 		return $workshop_id;
+	}
+
+	public static function delete_workshop( int $id ): bool|WP_Error {
+		if ( ! current_user_can( 'manage_workshop_passes' ) ) {
+			return new WP_Error( 'forbidden', __( 'You cannot manage workshops.', 'workshop-pass-desk' ) );
+		}
+		global $wpdb;
+		$owned = $wpdb->get_var( $wpdb->prepare( 'SELECT id FROM ' . WPD_DB::workshops_table() . ' WHERE id = %d AND owner_id = %d', $id, get_current_user_id() ) );
+		if ( ! $owned ) {
+			return new WP_Error( 'not_found', __( 'Workshop not found.', 'workshop-pass-desk' ) );
+		}
+		$passes = (int) $wpdb->get_var( $wpdb->prepare( 'SELECT COUNT(*) FROM ' . WPD_DB::passes_table() . ' WHERE workshop_id = %d', $id ) );
+		if ( $passes > 0 ) {
+			return new WP_Error( 'has_passes', __( 'Workshops with passes cannot be deleted. Cancel it instead.', 'workshop-pass-desk' ) );
+		}
+		foreach ( array( WPD_DB::sessions_table(), WPD_DB::waitlist_table(), WPD_DB::events_table() ) as $table ) {
+			$wpdb->query( $wpdb->prepare( "DELETE FROM {$table} WHERE workshop_id = %d", $id ) );
+		}
+		$wpdb->query( $wpdb->prepare( 'DELETE FROM ' . WPD_DB::workshops_table() . ' WHERE id = %d', $id ) );
+		return true;
 	}
 
 	private static function normalize_datetime( string $value ): string {
@@ -140,8 +225,17 @@ final class WPD_Service {
 		if ( ! function_exists( 'wc_get_order' ) ) {
 			return new WP_Error( 'woocommerce_missing', __( 'WooCommerce is required.', 'workshop-pass-desk' ) );
 		}
+		if ( ! self::crypto_available() ) {
+			return new WP_Error( 'crypto_unavailable', __( 'Pass cryptography is unavailable on this host.', 'workshop-pass-desk' ) );
+		}
 		$order = wc_get_order( $order_id );
 		if ( ! $order || ! in_array( $order->get_status(), array( 'processing', 'completed' ), true ) ) {
+			return array();
+		}
+		if ( method_exists( $order, 'get_meta' ) && $order->get_meta( '_subscription_renewal' ) ) {
+			return array();
+		}
+		if ( function_exists( 'wcs_order_contains_renewal' ) && wcs_order_contains_renewal( $order_id ) ) {
 			return array();
 		}
 		global $wpdb;
@@ -178,7 +272,12 @@ final class WPD_Service {
 					$wpdb->query( 'ROLLBACK' );
 					continue;
 				}
-				$code = strtoupper( substr( bin2hex( random_bytes( 12 ) ), 0, 16 ) );
+				try {
+					$code = strtoupper( substr( bin2hex( random_bytes( 12 ) ), 0, 16 ) );
+				} catch ( Exception $e ) {
+					$wpdb->query( 'ROLLBACK' );
+					return new WP_Error( 'random_failed', __( 'A pass code could not be generated.', 'workshop-pass-desk' ) );
+				}
 				$inserted = $wpdb->insert( $passes, array(
 					'workshop_id' => $workshop_id, 'order_id' => $order_id, 'order_item_id' => $item_id,
 					'item_index' => $index, 'customer_id' => (int) $order->get_user_id(), 'code_hash' => self::code_hash( $code ),
@@ -206,7 +305,7 @@ final class WPD_Service {
 		if ( '' === $code ) {
 			return array( 'status' => 'invalid', 'message' => __( 'Enter a pass code.', 'workshop-pass-desk' ) );
 		}
-		$rate_key = 'wpd_check_' . md5( (string) $actor_id . '|' . ( $_SERVER['REMOTE_ADDR'] ?? 'unknown' ) );
+		$rate_key = 'wpd_check_' . md5( 'check-in|' . $actor_id . '|' . ( $_SERVER['REMOTE_ADDR'] ?? 'unknown' ) );
 		$attempts = (int) get_transient( $rate_key );
 		if ( $attempts >= 30 ) {
 			return array( 'status' => 'rate_limited', 'message' => __( 'Too many attempts. Try again in a minute.', 'workshop-pass-desk' ) );
@@ -216,7 +315,12 @@ final class WPD_Service {
 		$passes = WPD_DB::passes_table();
 		$workshops = WPD_DB::workshops_table();
 		$attendance = WPD_DB::attendance_table();
-		$pass = $wpdb->get_row( $wpdb->prepare( "SELECT p.*, w.title, w.status AS workshop_status FROM {$passes} p INNER JOIN {$workshops} w ON w.id = p.workshop_id WHERE p.code_hash = %s LIMIT 1", self::code_hash( $code ) ) );
+		$hashes = self::code_hashes( $code );
+		if ( ! $hashes ) {
+			return array( 'status' => 'invalid', 'message' => __( 'Pass code is not recognized.', 'workshop-pass-desk' ) );
+		}
+		$placeholders = implode( ', ', array_fill( 0, count( $hashes ), '%s' ) );
+		$pass = $wpdb->get_row( $wpdb->prepare( "SELECT p.*, w.title, w.status AS workshop_status FROM {$passes} p INNER JOIN {$workshops} w ON w.id = p.workshop_id WHERE p.code_hash IN ({$placeholders}) LIMIT 1", $hashes ) );
 		if ( ! $pass ) {
 			return array( 'status' => 'invalid', 'message' => __( 'Pass code is not recognized.', 'workshop-pass-desk' ) );
 		}
@@ -230,13 +334,50 @@ final class WPD_Service {
 		if ( ! self::is_in_active_window( (int) $pass->workshop_id, $now ) ) {
 			return array( 'status' => 'out_of_window', 'message' => sprintf( __( 'Check-in opens %s and closes %s.', 'workshop-pass-desk' ), wp_date( get_option( 'date_format' ) . ' ' . get_option( 'time_format' ), strtotime( $pass->valid_from ) ), wp_date( get_option( 'date_format' ) . ' ' . get_option( 'time_format' ), strtotime( $pass->valid_until ) ) ), 'pass' => $pass );
 		}
+		$wpdb->query( 'START TRANSACTION' );
 		$changed = $wpdb->query( $wpdb->prepare( "UPDATE {$passes} SET checked_in_at = %s, checked_in_by = %d, updated_at = %s WHERE id = %d AND status = 'active' AND checked_in_at IS NULL", $now, $actor_id, $now, $pass->id ) );
 		if ( 1 !== (int) $changed ) {
+			$wpdb->query( 'ROLLBACK' );
 			return array( 'status' => 'already_checked_in', 'message' => __( 'This pass was checked in by another device.', 'workshop-pass-desk' ), 'pass' => $pass );
 		}
-		$wpdb->insert( $attendance, array( 'pass_id' => $pass->id, 'workshop_id' => $pass->workshop_id, 'actor_id' => $actor_id, 'checked_in_at' => $now ), array( '%d', '%d', '%d', '%s' ) );
+		$recorded = $wpdb->insert( $attendance, array( 'pass_id' => $pass->id, 'workshop_id' => $pass->workshop_id, 'actor_id' => $actor_id, 'checked_in_at' => $now ), array( '%d', '%d', '%d', '%s' ) );
+		if ( ! $recorded ) {
+			$wpdb->query( 'ROLLBACK' );
+			return array( 'status' => 'error', 'message' => __( 'Check-in could not be recorded. Try again.', 'workshop-pass-desk' ), 'pass' => $pass );
+		}
+		$wpdb->query( 'COMMIT' );
 		self::log_event( (int) $pass->workshop_id, (int) $pass->id, 'pass_checked_in', array( 'actor_id' => $actor_id ), $actor_id );
 		return array( 'status' => 'valid', 'message' => __( 'Pass accepted. Attendee checked in.', 'workshop-pass-desk' ), 'pass' => $pass );
+	}
+
+	public static function revoke_refunded_units( int $order_id, int $refund_id ): int {
+		$refund = function_exists( 'wc_get_order' ) ? wc_get_order( $refund_id ) : false;
+		if ( ! $refund || ! method_exists( $refund, 'get_items' ) ) {
+			return 0;
+		}
+		global $wpdb;
+		$revoked = 0;
+		foreach ( $refund->get_items( 'line_item' ) as $refund_item ) {
+			if ( ! method_exists( $refund_item, 'get_meta' ) ) {
+				continue;
+			}
+			$original_item = absint( $refund_item->get_meta( '_refunded_item_id' ) );
+			$qty = method_exists( $refund_item, 'get_quantity' ) ? abs( (int) $refund_item->get_quantity() ) : 0;
+			if ( ! $original_item || ! $qty ) {
+				continue;
+			}
+			$rows = $wpdb->get_results( $wpdb->prepare( 'SELECT id, workshop_id FROM ' . WPD_DB::passes_table() . ' WHERE order_id = %d AND order_item_id = %d AND checked_in_at IS NULL AND status = %s ORDER BY item_index DESC', $order_id, $original_item, 'active' ) );
+			foreach ( array_slice( (array) $rows, 0, $qty ) as $row ) {
+				$wpdb->query( $wpdb->prepare( "UPDATE " . WPD_DB::passes_table() . " SET status = 'cancelled', updated_at = %s WHERE id = %d AND status = 'active' AND checked_in_at IS NULL", self::now(), $row->id ) );
+				if ( 1 !== (int) $wpdb->rows_affected ) {
+					continue;
+				}
+				self::log_event( (int) $row->workshop_id, (int) $row->id, 'pass_cancelled', array( 'order_id' => $order_id, 'refund_id' => $refund_id ) );
+				self::promote_waitlist( (int) $row->workshop_id );
+				$revoked++;
+			}
+		}
+		return $revoked;
 	}
 
 	public static function cancel_order( int $order_id ): int {
@@ -259,6 +400,12 @@ final class WPD_Service {
 		if ( ! is_email( $email ) ) {
 			return new WP_Error( 'invalid_email', __( 'Enter a valid email address.', 'workshop-pass-desk' ) );
 		}
+		$rate_key = 'wpd_wl_' . md5( 'waitlist|' . $workshop_id . '|' . ( $_SERVER['REMOTE_ADDR'] ?? 'unknown' ) );
+		$attempts = (int) get_transient( $rate_key );
+		if ( $attempts >= 5 ) {
+			return new WP_Error( 'rate_limited', __( 'Too many waitlist requests. Try again later.', 'workshop-pass-desk' ) );
+		}
+		set_transient( $rate_key, $attempts + 1, HOUR_IN_SECONDS );
 		$workshop = $wpdb->get_row( $wpdb->prepare( 'SELECT id, title, status FROM ' . WPD_DB::workshops_table() . ' WHERE id = %d', $workshop_id ) );
 		if ( ! $workshop || 'cancelled' === $workshop->status ) {
 			return new WP_Error( 'not_found', __( 'That workshop is not accepting waitlist entries.', 'workshop-pass-desk' ) );
@@ -287,8 +434,11 @@ final class WPD_Service {
 			return null;
 		}
 		$workshop = $wpdb->get_row( $wpdb->prepare( 'SELECT title, starts_at FROM ' . WPD_DB::workshops_table() . ' WHERE id = %d', $workshop_id ) );
-		if ( $workshop && function_exists( 'wp_mail' ) ) {
-			wp_mail( $entry->email, sprintf( __( 'A place opened for %s', 'workshop-pass-desk' ), $workshop->title ), sprintf( __( 'A place is now available for %s. Please complete your purchase before the organizer releases it.', 'workshop-pass-desk' ), $workshop->title ) );
+		$sent = $workshop && function_exists( 'wp_mail' ) ? wp_mail( $entry->email, sprintf( __( 'A place opened for %s', 'workshop-pass-desk' ), $workshop->title ), sprintf( __( 'A place is now available for %s. Places go first come, first served, so complete your purchase promptly.', 'workshop-pass-desk' ), $workshop->title ) ) : false;
+		if ( ! $sent ) {
+			$wpdb->query( $wpdb->prepare( "UPDATE " . WPD_DB::waitlist_table() . " SET status = 'pending', updated_at = %s WHERE id = %d", self::now(), $entry->id ) );
+			self::log_event( $workshop_id, 0, 'mail_failed', array( 'waitlist_id' => (int) $entry->id, 'email' => $entry->email ) );
+			return null;
 		}
 		self::log_event( $workshop_id, 0, 'waitlist_invited', array( 'waitlist_id' => (int) $entry->id, 'email' => $entry->email ) );
 		return $entry;

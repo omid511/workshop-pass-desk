@@ -8,6 +8,7 @@ final class WPD_Admin {
 		add_action( 'admin_menu', array( __CLASS__, 'menu' ) );
 		add_action( 'admin_enqueue_scripts', array( __CLASS__, 'assets' ) );
 		add_action( 'admin_post_wpd_save_workshop', array( __CLASS__, 'save_workshop' ) );
+		add_action( 'admin_post_wpd_delete_workshop', array( __CLASS__, 'delete_workshop' ) );
 		add_action( 'admin_post_wpd_save_session', array( __CLASS__, 'save_session' ) );
 		add_action( 'admin_post_wpd_check_in', array( __CLASS__, 'check_in' ) );
 		add_action( 'admin_post_wpd_export', array( __CLASS__, 'export_csv' ) );
@@ -39,6 +40,17 @@ final class WPD_Admin {
 		exit;
 	}
 
+	public static function delete_workshop(): void {
+		if ( ! current_user_can( 'manage_workshop_passes' ) || ! check_admin_referer( 'wpd_delete_workshop' ) ) {
+			wp_die( esc_html__( 'Permission check failed.', 'workshop-pass-desk' ), 403 );
+		}
+		$result = WPD_Service::delete_workshop( absint( $_POST['id'] ?? 0 ) );
+		if ( is_wp_error( $result ) ) {
+			wp_die( esc_html( $result->get_error_message() ), 400 );
+		}
+		wp_safe_redirect( admin_url( 'admin.php?page=wpd-workshops&deleted=1' ) );
+		exit;
+	}
 	public static function check_in(): void {
 		if ( ! current_user_can( 'manage_workshop_passes' ) || ! check_admin_referer( 'wpd_check_in' ) ) {
 			wp_die( esc_html__( 'Permission check failed.', 'workshop-pass-desk' ), 403 );
@@ -61,6 +73,14 @@ final class WPD_Admin {
 		exit;
 	}
 
+	public static function csv_cell( $value ): string {
+		$cell = (string) $value;
+		if ( isset( $cell[0] ) && str_contains( '=+-@', $cell[0] ) ) {
+			return "'" . $cell;
+		}
+		return $cell;
+	}
+
 	public static function export_csv(): void {
 		if ( ! current_user_can( 'manage_workshop_passes' ) || ! check_admin_referer( 'wpd_export' ) ) {
 			wp_die( esc_html__( 'Permission check failed.', 'workshop-pass-desk' ), 403 );
@@ -76,9 +96,9 @@ final class WPD_Admin {
 		header( 'Content-Type: text/csv; charset=utf-8' );
 		header( 'Content-Disposition: attachment; filename="workshop-' . $workshop_id . '-attendance.csv"' );
 		$out = fopen( 'php://output', 'wb' );
-		fputcsv( $out, array( 'workshop', 'pass_id', 'order_id', 'customer_id', 'status', 'valid_from', 'valid_until', 'checked_in_at', 'checked_in_by', 'attendance_event_at' ) );
+		fputcsv( $out, array_map( array( __CLASS__, 'csv_cell' ), array( 'workshop', 'pass_id', 'order_id', 'customer_id', 'status', 'valid_from', 'valid_until', 'checked_in_at', 'checked_in_by', 'attendance_event_at' ) ) );
 		foreach ( $rows as $row ) {
-			fputcsv( $out, array( $summary->title, $row->id, $row->order_id, $row->customer_id, $row->status, $row->valid_from, $row->valid_until, $row->checked_in_at, $row->checked_in_by, $row->attendance_at ) );
+			fputcsv( $out, array_map( array( __CLASS__, 'csv_cell' ), array( $summary->title, $row->id, $row->order_id, $row->customer_id, $row->status, $row->valid_from, $row->valid_until, $row->checked_in_at, $row->checked_in_by, $row->attendance_at ) ) );
 		}
 		fclose( $out );
 		exit;
@@ -104,8 +124,20 @@ final class WPD_Admin {
 			<p><label><?php esc_html_e( 'Status', 'workshop-pass-desk' ); ?><br><select name="status"><option value="draft"><?php esc_html_e( 'Draft', 'workshop-pass-desk' ); ?></option><option value="active"><?php esc_html_e( 'Active', 'workshop-pass-desk' ); ?></option><option value="cancelled"><?php esc_html_e( 'Cancelled', 'workshop-pass-desk' ); ?></option></select></label></p>
 			<p><button class="button button-primary"><?php esc_html_e( 'Create workshop', 'workshop-pass-desk' ); ?></button></p>
 		</form>
+		<?php $edit_row = ( $edit_id = absint( $_GET['edit'] ?? 0 ) ) ? $wpdb->get_row( $wpdb->prepare( 'SELECT * FROM ' . WPD_DB::workshops_table() . ' WHERE id = %d AND owner_id = %d', $edit_id, get_current_user_id() ) ) : null; ?>
+		<?php if ( $edit_row ) : ?><h2><?php esc_html_e( 'Edit workshop', 'workshop-pass-desk' ); ?></h2>
+		<form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>" class="wpd-form">
+			<input type="hidden" name="action" value="wpd_save_workshop"><input type="hidden" name="id" value="<?php echo esc_attr( $edit_row->id ); ?>"><?php wp_nonce_field( 'wpd_save_workshop' ); ?>
+			<p><label><?php esc_html_e( 'Title', 'workshop-pass-desk' ); ?><br><input required name="title" class="regular-text" value="<?php echo esc_attr( $edit_row->title ); ?>"></label></p>
+			<p><label><?php esc_html_e( 'Description', 'workshop-pass-desk' ); ?><br><textarea name="description" class="large-text"><?php echo esc_textarea( $edit_row->description ); ?></textarea></label></p>
+			<p><label><?php esc_html_e( 'Starts (site timezone)', 'workshop-pass-desk' ); ?><br><input required type="datetime-local" name="starts_at" value="<?php echo esc_attr( date( 'Y-m-d\TH:i', strtotime( $edit_row->starts_at ) ) ); ?>"></label>
+			<label><?php esc_html_e( 'Ends', 'workshop-pass-desk' ); ?><br><input required type="datetime-local" name="ends_at" value="<?php echo esc_attr( date( 'Y-m-d\TH:i', strtotime( $edit_row->ends_at ) ) ); ?>"></label>
+			<label><?php esc_html_e( 'Capacity', 'workshop-pass-desk' ); ?><br><input required type="number" min="1" name="capacity" value="<?php echo esc_attr( $edit_row->capacity ); ?>"></label></p>
+			<p><label><?php esc_html_e( 'Status', 'workshop-pass-desk' ); ?><br><select name="status"><option value="draft"<?php selected( $edit_row->status, 'draft' ); ?>><?php esc_html_e( 'Draft', 'workshop-pass-desk' ); ?></option><option value="active"<?php selected( $edit_row->status, 'active' ); ?>><?php esc_html_e( 'Active', 'workshop-pass-desk' ); ?></option><option value="cancelled"<?php selected( $edit_row->status, 'cancelled' ); ?>><?php esc_html_e( 'Cancelled', 'workshop-pass-desk' ); ?></option></select></label></p>
+			<p><button class="button button-primary"><?php esc_html_e( 'Save changes', 'workshop-pass-desk' ); ?></button></p>
+		</form><?php endif; ?>
 		<h2><?php esc_html_e( 'Your workshops', 'workshop-pass-desk' ); ?></h2><table class="widefat striped"><thead><tr><th><?php esc_html_e( 'Workshop', 'workshop-pass-desk' ); ?></th><th><?php esc_html_e( 'Window', 'workshop-pass-desk' ); ?></th><th><?php esc_html_e( 'Status', 'workshop-pass-desk' ); ?></th><th><?php esc_html_e( 'Capacity', 'workshop-pass-desk' ); ?></th><th><?php esc_html_e( 'Sessions', 'workshop-pass-desk' ); ?></th><th><?php esc_html_e( 'Operations', 'workshop-pass-desk' ); ?></th></tr></thead><tbody>
-		<?php foreach ( $rows as $row ) : $summary = WPD_Service::summary( (int) $row->id, get_current_user_id() ); $sessions = WPD_Service::sessions( (int) $row->id, get_current_user_id() ); $waitlist = WPD_Service::waitlist( (int) $row->id, get_current_user_id() ); ?><tr><td><strong><?php echo esc_html( $row->title ); ?></strong><br><small><?php echo $row->product_id ? esc_html( 'Product #' . $row->product_id ) : esc_html__( 'Map a WooCommerce product', 'workshop-pass-desk' ); ?></small></td><td><?php echo esc_html( $row->starts_at . ' – ' . $row->ends_at ); ?></td><td><?php echo esc_html( ucfirst( $row->status ) ); ?></td><td><?php echo esc_html( (int) $summary->issued . ' / ' . (int) $row->capacity . ' issued; ' . (int) $summary->checked_in . ' checked in' ); ?></td><td><?php foreach ( $sessions as $session ) : ?><div><?php echo esc_html( $session->title . ': ' . $session->starts_at . '–' . $session->ends_at ); ?></div><?php endforeach; ?><form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>"><input type="hidden" name="action" value="wpd_save_session"><input type="hidden" name="workshop_id" value="<?php echo esc_attr( $row->id ); ?>"><?php wp_nonce_field( 'wpd_save_session' ); ?><input required name="title" placeholder="Session title"><input required type="datetime-local" name="starts_at"><input required type="datetime-local" name="ends_at"><button class="button"><?php esc_html_e( 'Add session', 'workshop-pass-desk' ); ?></button></form></td><td><a class="button" href="<?php echo esc_url( wp_nonce_url( admin_url( 'admin-post.php?action=wpd_export&workshop_id=' . (int) $row->id ), 'wpd_export' ) ); ?>"><?php esc_html_e( 'Export CSV', 'workshop-pass-desk' ); ?></a><br><?php echo esc_html( count( $waitlist ) . ' waitlist entries' ); ?></td></tr><?php endforeach; ?>
+		<?php foreach ( $rows as $row ) : $summary = WPD_Service::summary( (int) $row->id, get_current_user_id() ); $sessions = WPD_Service::sessions( (int) $row->id, get_current_user_id() ); $waitlist = WPD_Service::waitlist( (int) $row->id, get_current_user_id() ); ?><tr><td><strong><?php echo esc_html( $row->title ); ?></strong><br><small><?php echo $row->product_id ? esc_html( 'Product #' . $row->product_id ) : esc_html__( 'Map a WooCommerce product', 'workshop-pass-desk' ); ?></small></td><td><?php echo esc_html( $row->starts_at . ' – ' . $row->ends_at ); ?></td><td><?php echo esc_html( ucfirst( $row->status ) ); ?></td><td><?php echo esc_html( (int) $summary->issued . ' / ' . (int) $row->capacity . ' issued; ' . (int) $summary->checked_in . ' checked in' ); ?></td><td><?php foreach ( $sessions as $session ) : ?><div><?php echo esc_html( $session->title . ': ' . $session->starts_at . '–' . $session->ends_at ); ?></div><?php endforeach; ?><form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>"><input type="hidden" name="action" value="wpd_save_session"><input type="hidden" name="workshop_id" value="<?php echo esc_attr( $row->id ); ?>"><?php wp_nonce_field( 'wpd_save_session' ); ?><input required name="title" placeholder="Session title"><input required type="datetime-local" name="starts_at"><input required type="datetime-local" name="ends_at"><button class="button"><?php esc_html_e( 'Add session', 'workshop-pass-desk' ); ?></button></form></td><td><a class="button" href="<?php echo esc_url( wp_nonce_url( admin_url( 'admin-post.php?action=wpd_export&workshop_id=' . (int) $row->id ), 'wpd_export' ) ); ?>"><?php esc_html_e( 'Export CSV', 'workshop-pass-desk' ); ?></a><br><?php echo esc_html( count( $waitlist ) . ' waitlist entries' ); ?><br><a class="button" href="<?php echo esc_url( admin_url( 'admin.php?page=wpd-workshops&edit=' . (int) $row->id ) ); ?>"><?php esc_html_e( 'Edit', 'workshop-pass-desk' ); ?></a> <form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>" style="display:inline"><input type="hidden" name="action" value="wpd_delete_workshop"><input type="hidden" name="id" value="<?php echo esc_attr( $row->id ); ?>"><?php wp_nonce_field( 'wpd_delete_workshop' ); ?><button class="button button-link-delete" onclick="return confirm('<?php echo esc_js( __( 'Delete this workshop? Passes must be zero.', 'workshop-pass-desk' ) ); ?>')"><?php esc_html_e( 'Delete', 'workshop-pass-desk' ); ?></button></form></td></tr><?php endforeach; ?>
 		<?php if ( ! $rows ) : ?><tr><td colspan="6"><?php esc_html_e( 'No workshops yet.', 'workshop-pass-desk' ); ?></td></tr><?php endif; ?></tbody></table></div>
 		<?php
 	}
