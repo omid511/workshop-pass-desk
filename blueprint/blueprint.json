@@ -3,13 +3,38 @@
   "landingPage": "/wp-admin/admin.php?page=wpd-workshops",
   "preferredVersions": {
     "php": "8.3",
-    "wp": "6.6"
+    "wp": "latest"
+  },
+  "features": {
+    "networking": true
   },
   "steps": [
-    { "step": "login", "username": "organizer", "password": "playground-demo-only" },
-    { "step": "installPlugin", "pluginData": { "resource": "url", "url": "https://codeload.github.com/omid511/workshop-pass-desk/zip/refs/heads/main" } },
-    { "step": "installPlugin", "pluginData": { "resource": "url", "url": "https://downloads.wordpress.org/plugin/woocommerce.9.6.4.zip" } },
-    { "step": "activatePlugin", "pluginPath": "woocommerce/woocommerce.php" },
-    { "step": "activatePlugin", "pluginPath": "workshop-pass-desk-main/workshop-pass-desk.php" }
+    {
+      "step": "login",
+      "username": "admin",
+      "password": "password"
+    },
+    {
+      "step": "installPlugin",
+      "pluginData": {
+        "resource": "url",
+        "url": "https://downloads.wordpress.org/plugin/woocommerce.zip"
+      }
+    },
+    {
+      "step": "installPlugin",
+      "pluginData": {
+        "resource": "url",
+        "url": "https://github.com/omid511/workshop-pass-desk/releases/latest/download/workshop-pass-desk.zip"
+      }
+    },
+    {
+      "step": "activatePlugin",
+      "pluginPath": "woocommerce/woocommerce.php"
+    },
+    {
+      "step": "activatePlugin",
+      "pluginPath": "workshop-pass-desk/workshop-pass-desk.php"
+    }
   ]
 }

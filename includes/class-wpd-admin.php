@@ -6,10 +6,19 @@ if ( ! defined( 'ABSPATH' ) ) {
 final class WPD_Admin {
 	public static function hooks(): void {
 		add_action( 'admin_menu', array( __CLASS__, 'menu' ) );
+		add_action( 'admin_enqueue_scripts', array( __CLASS__, 'assets' ) );
 		add_action( 'admin_post_wpd_save_workshop', array( __CLASS__, 'save_workshop' ) );
 		add_action( 'admin_post_wpd_save_session', array( __CLASS__, 'save_session' ) );
 		add_action( 'admin_post_wpd_check_in', array( __CLASS__, 'check_in' ) );
 		add_action( 'admin_post_wpd_export', array( __CLASS__, 'export_csv' ) );
+	}
+
+	public static function assets( string $hook ): void {
+		$page = isset( $_GET['page'] ) ? sanitize_key( wp_unslash( $_GET['page'] ) ) : '';
+		if ( 'toplevel_page_wpd-workshops' !== $hook && ! in_array( $page, array( 'wpd-workshops', 'wpd-check-in' ), true ) ) {
+			return;
+		}
+		wp_enqueue_style( 'wpd-admin', plugin_dir_url( WPD_FILE ) . 'assets/style.css', array(), WPD_VERSION );
 	}
 
 	public static function menu(): void {

@@ -65,6 +65,7 @@ final class WPD_DB {
 			workshop_id BIGINT UNSIGNED NOT NULL,
 			order_id BIGINT UNSIGNED NOT NULL,
 			order_item_id BIGINT UNSIGNED NOT NULL,
+			item_index SMALLINT UNSIGNED NOT NULL DEFAULT 0,
 			customer_id BIGINT UNSIGNED NOT NULL DEFAULT 0,
 			code_hash CHAR(64) NOT NULL,
 			code_ciphertext TEXT NOT NULL,
@@ -75,7 +76,7 @@ final class WPD_DB {
 			checked_in_by BIGINT UNSIGNED NULL,
 			created_at DATETIME NOT NULL,
 			updated_at DATETIME NOT NULL,
-			PRIMARY KEY (id), UNIQUE KEY order_item (order_id, order_item_id), UNIQUE KEY code_hash (code_hash),
+			PRIMARY KEY (id), UNIQUE KEY order_item (order_id, order_item_id, item_index), UNIQUE KEY code_hash (code_hash),
 			KEY workshop_status (workshop_id, status), KEY customer_id (customer_id), KEY valid_window (valid_from, valid_until)
 		) {$collate};" );
 
@@ -121,6 +122,22 @@ final class WPD_DB {
 			created_at DATETIME NOT NULL,
 			PRIMARY KEY (id), KEY workshop_time (workshop_id, created_at), KEY pass_time (pass_id, created_at)
 		) {$collate};" );
+
+		// 1.2.0: one pass per ordered unit. dbDelta adds new columns but never
+		// widens an existing key, so migrate the idempotency key explicitly.
+		$has_index_col = $wpdb->get_var( $wpdb->prepare( 'SHOW COLUMNS FROM ' . $passes . ' LIKE %s', 'item_index' ) );
+		if ( ! $has_index_col ) {
+			$wpdb->query( 'ALTER TABLE ' . $passes . ' ADD COLUMN item_index SMALLINT UNSIGNED NOT NULL DEFAULT 0 AFTER order_item_id' );
+		}
+		$key_cols = $wpdb->get_results( 'SHOW INDEX FROM ' . $passes . " WHERE Key_name = 'order_item'", ARRAY_A );
+		$keyed = array();
+		foreach ( (array) $key_cols as $key_col ) {
+			$keyed[] = isset( $key_col['Column_name'] ) ? $key_col['Column_name'] : '';
+		}
+		sort( $keyed );
+		if ( array( 'item_index', 'order_id', 'order_item_id' ) !== $keyed ) {
+			$wpdb->query( 'ALTER TABLE ' . $passes . " DROP INDEX order_item, ADD UNIQUE KEY order_item (order_id, order_item_id, item_index)" );
+		}
 
 		update_option( 'wpd_db_version', WPD_DB_VERSION );
 		$admin = get_role( 'administrator' );

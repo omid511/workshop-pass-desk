@@ -1,0 +1,29 @@
+name: PHP security scan
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  schedule:
+    - cron: "53 3 * * 1"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: workshop-pass-desk-security-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  semgrep:
+    name: Semgrep Community Edition
+    runs-on: ubuntu-latest
+    container:
+      image: semgrep/semgrep:1.166.0
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v6
+      - name: Scan PHP source
+        run: semgrep scan --config auto --error --metrics off

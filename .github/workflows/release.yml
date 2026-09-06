@@ -5,12 +5,18 @@ on:
     types: [published]
 
 permissions:
-  contents: write
+  contents: read
+
+concurrency:
+  group: workshop-pass-desk-release-${{ github.event.release.tag_name }}
+  cancel-in-progress: false
 
 jobs:
   package:
     if: startsWith(github.event.release.tag_name, 'v')
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
     steps:
       - name: Check out release tag
         uses: actions/checkout@v6
@@ -29,10 +35,12 @@ jobs:
           php tests/test_contract.php
           rm -rf dist
           mkdir -p dist/workshop-pass-desk
-          cp workshop-pass-desk.php README.md LICENSE dist/workshop-pass-desk/
+          cp workshop-pass-desk.php uninstall.php README.md LICENSE dist/workshop-pass-desk/
           cp -R includes assets dist/workshop-pass-desk/
           (cd dist && zip -qr workshop-pass-desk.zip workshop-pass-desk)
+      - name: Generate SHA-256 checksum
+        run: (cd dist && sha256sum workshop-pass-desk.zip > workshop-pass-desk.zip.sha256)
       - name: Attach plugin ZIP to release
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh release upload "$GITHUB_REF_NAME" dist/workshop-pass-desk.zip --repo "$GITHUB_REPOSITORY" --clobber
+        run: gh release upload "$GITHUB_REF_NAME" dist/workshop-pass-desk.zip dist/workshop-pass-desk.zip.sha256 --repo "$GITHUB_REPOSITORY" --clobber

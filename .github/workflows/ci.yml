@@ -8,6 +8,10 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: workshop-pass-desk-ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 jobs:
   dependency-review:
     if: github.event_name == 'pull_request'
@@ -47,7 +51,7 @@ jobs:
           set -eu
           rm -rf dist
           mkdir -p dist/workshop-pass-desk
-          cp workshop-pass-desk.php README.md LICENSE dist/workshop-pass-desk/
+          cp workshop-pass-desk.php uninstall.php README.md LICENSE dist/workshop-pass-desk/
           cp -R includes assets dist/workshop-pass-desk/
           (cd dist && zip -qr workshop-pass-desk.zip workshop-pass-desk)
       - name: Upload Playground-ready artifact
@@ -55,5 +59,6 @@ jobs:
         with:
           name: workshop-pass-desk-php-${{ matrix.php }}
           path: dist/workshop-pass-desk.zip
+          if-no-files-found: error
       - name: WordPress smoke path
         run: echo 'Full WordPress/WooCommerce integration smoke path is documented in README.md; use a disposable Playground or test site with the uploaded ZIP.'

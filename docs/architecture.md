@@ -10,10 +10,9 @@ WordPress admin / shortcodes -> workshop + session service
                          audit events + owner-scoped export
 ```
 
-The plugin keeps workshop operations separate from WooCommerce product and
-order mechanics. A unique order-item key makes completion-hook replay safe;
-capacity is checked while the workshop row is locked; pass secrets are stored
-as an HMAC verification hash with an encrypted attendee recovery value.
+order mechanics. A unique (order, item, unit-index) key makes completion-hook replay safe
+and gives one pass per ordered unit; capacity is checked while the workshop row is locked;
+pass secrets are stored as an HMAC verification hash with an encrypted attendee recovery value.
 Capabilities, nonces, ownership, escaping, and prepared SQL are applied at the
 WordPress boundary.
 

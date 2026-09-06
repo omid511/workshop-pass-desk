@@ -5,6 +5,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 
 final class WPD_Plugin {
 	public static function boot(): void {
+		load_plugin_textdomain( 'workshop-pass-desk', false, dirname( plugin_basename( WPD_FILE ) ) . '/languages' );
 		if ( ! class_exists( 'WooCommerce' ) ) {
 			add_action( 'admin_notices', static function(): void { if ( current_user_can( 'activate_plugins' ) ) { echo '<div class="notice notice-warning"><p>' . esc_html__( 'Workshop Pass Desk needs WooCommerce active.', 'workshop-pass-desk' ) . '</p></div>'; } } );
 			return;

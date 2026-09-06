@@ -150,7 +150,13 @@ final class WPD_Service {
 		$workshops = WPD_DB::workshops_table();
 		foreach ( $order->get_items( 'line_item' ) as $item_id => $item ) {
 			$product_id = $item->get_product_id();
-			$workshop_id = absint( get_post_meta( $product_id, '_wpd_workshop_id', true ) );
+			$workshop_id = 0;
+			if ( method_exists( $item, 'get_variation_id' ) && $item->get_variation_id() ) {
+				$workshop_id = absint( get_post_meta( $item->get_variation_id(), '_wpd_workshop_id', true ) );
+			}
+			if ( ! $workshop_id ) {
+				$workshop_id = absint( get_post_meta( $product_id, '_wpd_workshop_id', true ) );
+			}
 			if ( ! $workshop_id ) {
 				continue;
 			}
@@ -158,31 +164,35 @@ final class WPD_Service {
 			if ( ! $workshop || 'active' !== $workshop->status ) {
 				continue;
 			}
-			$existing = $wpdb->get_var( $wpdb->prepare( "SELECT id FROM {$passes} WHERE order_id = %d AND order_item_id = %d", $order_id, $item_id ) );
-			if ( $existing ) {
-				continue;
-			}
-			$wpdb->query( 'START TRANSACTION' );
-			$locked = $wpdb->get_row( $wpdb->prepare( "SELECT * FROM {$workshops} WHERE id = %d FOR UPDATE", $workshop_id ) );
-			$issued = (int) $wpdb->get_var( $wpdb->prepare( "SELECT COUNT(*) FROM {$passes} WHERE workshop_id = %d AND status = 'active'", $workshop_id ) );
-			if ( ! $locked || $issued >= (int) $locked->capacity ) {
-				$wpdb->query( 'ROLLBACK' );
-				continue;
-			}
-			$code = strtoupper( substr( bin2hex( random_bytes( 12 ) ), 0, 16 ) );
-			$inserted = $wpdb->insert( $passes, array(
-				'workshop_id' => $workshop_id, 'order_id' => $order_id, 'order_item_id' => $item_id,
-				'customer_id' => (int) $order->get_user_id(), 'code_hash' => self::code_hash( $code ),
-				'code_ciphertext' => self::encrypt_code( $code ), 'status' => 'active', 'valid_from' => $locked->starts_at,
-				'valid_until' => $locked->ends_at, 'created_at' => self::now(), 'updated_at' => self::now(),
-			), array( '%d', '%d', '%d', '%d', '%s', '%s', '%s', '%s', '%s', '%s', '%s' ) );
-			if ( $inserted ) {
-				$wpdb->query( 'COMMIT' );
-				$pass_id = (int) $wpdb->insert_id;
-				$created[] = array( 'pass_id' => $pass_id, 'code' => $code, 'workshop_id' => $workshop_id );
-				self::log_event( $workshop_id, $pass_id, 'pass_issued', array( 'order_id' => $order_id, 'order_item_id' => (int) $item_id ), (int) $order->get_user_id() );
-			} else {
-				$wpdb->query( 'ROLLBACK' );
+			$quantity = method_exists( $item, 'get_quantity' ) ? max( 1, (int) $item->get_quantity() ) : 1;
+			$issued_indexes = $wpdb->get_col( $wpdb->prepare( "SELECT item_index FROM {$passes} WHERE order_id = %d AND order_item_id = %d", $order_id, $item_id ) );
+			$issued_indexes = array_map( 'intval', (array) $issued_indexes );
+			for ( $index = 0; $index < $quantity; $index++ ) {
+				if ( in_array( $index, $issued_indexes, true ) ) {
+					continue;
+				}
+				$wpdb->query( 'START TRANSACTION' );
+				$locked = $wpdb->get_row( $wpdb->prepare( "SELECT * FROM {$workshops} WHERE id = %d FOR UPDATE", $workshop_id ) );
+				$issued = (int) $wpdb->get_var( $wpdb->prepare( "SELECT COUNT(*) FROM {$passes} WHERE workshop_id = %d AND status = 'active'", $workshop_id ) );
+				if ( ! $locked || $issued >= (int) $locked->capacity ) {
+					$wpdb->query( 'ROLLBACK' );
+					continue;
+				}
+				$code = strtoupper( substr( bin2hex( random_bytes( 12 ) ), 0, 16 ) );
+				$inserted = $wpdb->insert( $passes, array(
+					'workshop_id' => $workshop_id, 'order_id' => $order_id, 'order_item_id' => $item_id,
+					'item_index' => $index, 'customer_id' => (int) $order->get_user_id(), 'code_hash' => self::code_hash( $code ),
+					'code_ciphertext' => self::encrypt_code( $code ), 'status' => 'active', 'valid_from' => $locked->starts_at,
+					'valid_until' => $locked->ends_at, 'created_at' => self::now(), 'updated_at' => self::now(),
+				), array( '%d', '%d', '%d', '%d', '%d', '%s', '%s', '%s', '%s', '%s', '%s', '%s' ) );
+				if ( $inserted ) {
+					$wpdb->query( 'COMMIT' );
+					$pass_id = (int) $wpdb->insert_id;
+					$created[] = array( 'pass_id' => $pass_id, 'code' => $code, 'workshop_id' => $workshop_id );
+					self::log_event( $workshop_id, $pass_id, 'pass_issued', array( 'order_id' => $order_id, 'order_item_id' => (int) $item_id, 'item_index' => $index ), (int) $order->get_user_id() );
+				} else {
+					$wpdb->query( 'ROLLBACK' );
+				}
 			}
 		}
 		return $created;
@@ -298,6 +308,15 @@ final class WPD_Service {
 	public static function customer_passes( int $user_id ): array {
 		global $wpdb;
 		$rows = $wpdb->get_results( $wpdb->prepare( "SELECT p.*, w.title FROM " . WPD_DB::passes_table() . " p INNER JOIN " . WPD_DB::workshops_table() . " w ON w.id = p.workshop_id WHERE p.customer_id = %d ORDER BY p.created_at DESC", $user_id ) );
+		foreach ( $rows as $row ) {
+			$row->code = self::decrypt_code( $row->code_ciphertext );
+		}
+		return $rows;
+	}
+
+	public static function order_passes( int $order_id ): array {
+		global $wpdb;
+		$rows = $wpdb->get_results( $wpdb->prepare( "SELECT p.*, w.title FROM " . WPD_DB::passes_table() . " p INNER JOIN " . WPD_DB::workshops_table() . " w ON w.id = p.workshop_id WHERE p.order_id = %d ORDER BY p.order_item_id ASC, p.item_index ASC", $order_id ) );
 		foreach ( $rows as $row ) {
 			$row->code = self::decrypt_code( $row->code_ciphertext );
 		}

@@ -28,3 +28,13 @@ for example, checkout `v6`, dependency review `v5`, and artifact upload `v4`.
 This keeps routine upstream fixes flowing while making major-version changes
 visible in reviewed Dependabot updates. Keep workflow permissions at the
 smallest scope needed by each job.
+
+GitHub CodeQL does not analyze PHP. The repository therefore uses the
+credential-free Semgrep Community Edition workflow for PHP security scanning;
+keep it free of secrets and do not replace it with a nominal CodeQL workflow.
+
+## Releases
+
+Publish a GitHub release from a `v*` tag. The release workflow re-runs PHP
+linting and contract tests, packages the plugin ZIP, and uploads a SHA-256
+checksum. Keep the release artifact reproducible from the tagged source.
