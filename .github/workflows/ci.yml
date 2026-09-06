@@ -57,7 +57,7 @@ jobs:
           cp -R includes assets languages dist/workshop-pass-desk/
           (cd dist && zip -qr workshop-pass-desk.zip workshop-pass-desk)
       - name: Upload Playground-ready artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: workshop-pass-desk-php-${{ matrix.php }}
           path: dist/workshop-pass-desk.zip
